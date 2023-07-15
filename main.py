@@ -50,11 +50,18 @@ def get_all_posts():
     posts = BlogPost.query.all()
     return render_template("index.html", all_posts=posts)
 
-
+# Register new users
 @app.route('/register', methods=["GET", "POST"])
 def register():
     form = RegisterForm()
     if form.validate_on_submit():
+
+        #If user's email already exists
+        if User.query.filter_by(email=form.email.data).first():
+            #Send flash messsage
+            flash("You've already signed up with that email, log in instead!")
+            #Redirect to /login route.
+            return redirect(url_for('login'))
 
         hash_and_salted_password = generate_password_hash(
             form.password.data,
@@ -68,15 +75,40 @@ def register():
         )
         db.session.add(new_user)
         db.session.commit()
-
+        #This line will authenticate the user with Flask-Login
+        login_user(new_user)
         return redirect(url_for("get_all_posts"))
     
-    return render_template("register.html")
+    return render_template("register.html", form=form)
 
+# Login Registered Users
+login_manager = LoginManager()
+login_manager.init_app(app)
 
-@app.route('/login')
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+@app.route('/login', methods=["GET", "POST"])
 def login():
-    return render_template("login.html")
+    form = LoginForm()
+    if form.validate_on_submit():
+        email = form.email.data
+        password = form.password.data
+
+        user = User.query.filter_by(email=email).first()
+        # Email doesn't exist
+        if not user:
+            flash("That email does not exist, please try again.")
+            return redirect(url_for('login'))
+        # Password incorrect
+        elif not check_password_hash(user.password, password):
+            flash('Password incorrect, please try again.')
+            return redirect(url_for('login'))
+        else:
+            login_user(user)
+            return redirect(url_for('get_all_posts'))
+    return render_template("login.html", form=form)
 
 
 @app.route('/logout')
